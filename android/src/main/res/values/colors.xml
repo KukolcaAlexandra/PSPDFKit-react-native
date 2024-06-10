@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="toolbarColorPrimary">#FFF5F7F9</color>
+  <color name="toolbarTextColor">#FF202020</color>
+  <color name="toolbarTextHintColor">#FF808080</color>
+  <color name="iconsTintLight">#FF63718E</color>
+  <color name="iconsTintDark">#FFBABDC0</color>
+</resources>

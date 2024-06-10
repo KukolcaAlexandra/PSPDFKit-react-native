@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="Adnoc.Theme.Default" parent="PSPDFKit.Theme.Default">
+    <item name="colorPrimary">@color/toolbarColorPrimary</item>
+    <item name="pspdf__mainToolbarStyle">@style/Adnoc.MainToolbar</item>
+    <item name="pspdf__actionBarIconsStyle">@style/Adnoc.ActionBarIcons</item>
+    <item name="pspdf__inlineSearchStyle">@style/Adnoc.SearchViewInline</item>
+  </style>
+
+  <style name="Adnoc.SearchViewInline" parent="PSPDFKit.SearchViewInline">
+    <item name="pspdf__inputFieldTextAppearance">@style/Adnoc.SearchViewInline.InputFieldTextAppearance</item>
+    <item name="pspdf__resultTextAppearance">@style/Adnoc.SearchViewInline.ResultTextAppearance</item>
+
+    <item name="pspdf__throbberColor">@color/iconsTintLight</item>
+
+    <item name="pspdf__prevIconColorTint">@color/iconsTintLight</item>
+    <item name="pspdf__nextIconColorTint">@color/iconsTintLight</item>
+    <item name="pspdf__backIconColorTint">@color/iconsTintLight</item>
+  </style>
+
+  <style name="Adnoc.SearchViewInline.ResultTextAppearance" parent="PSPDFKit.SearchViewInline.ResultTextAppearance">
+    <item name="android:textColor">@color/toolbarTextColor</item>
+  </style>
+
+  <style name="Adnoc.SearchViewInline.InputFieldTextAppearance" parent="PSPDFKit.SearchViewInline.InputFieldTextAppearance">
+    <item name="android:textColor">@color/toolbarTextColor</item>
+    <item name="android:textColorHint">@color/toolbarTextHintColor</item>
+  </style>
+
+  <style name="Adnoc.MainToolbar" parent="PSPDFKit.MainToolbar">
+    <item name="titleTextColor">@color/toolbarTextColor</item>
+    <item name="pspdf__textColor">@color/toolbarTextColor</item>
+
+    <item name="pspdf__toolbarPopupTheme">@style/Adnoc.ToolbarPopupTheme</item>
+  </style>
+
+  <style name="Adnoc.ToolbarPopupTheme" parent="PSPDFKit.ToolbarPopupTheme">
+    <item name="android:textColor">@color/toolbarTextColor</item>
+  </style>
+
+  <style name="Adnoc.ActionBarIcons" parent="PSPDFKit.ActionBarIcons">
+    <item name="pspdf__iconsColor">@color/iconsTintLight</item>
+  </style>
+
+  <style name="Adnoc.ActionBarIcons.Dark" parent="PSPDFKit.ActionBarIcons.Dark">
+    <item name="pspdf__iconsColor">@color/iconsTintDark</item>
+  </style>
+
+  <style name="Adnoc.Theme.Dark" parent="PSPDFKit.Theme.Dark">
+    <item name="pspdf__actionBarIconsStyle">@style/Adnoc.ActionBarIcons.Dark</item>
+  </style>
+
+</resources>
+
