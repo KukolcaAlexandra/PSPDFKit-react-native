@@ -244,6 +244,39 @@
   return @{@"annotations" : annotationsJSON};
 }
 
+- (void)rotatePage:(id)jsonAnnotation error:(NSError *_Nullable *)error {
+  if (![jsonAnnotation isKindOfClass:NSNumber.class]) {
+    NSLog(@"Invalid JSON Annotation.");
+  }
+
+  NSUInteger pageIndex = [((NSNumber *) jsonAnnotation) intValue];
+  PSPDFDocument *document = self.pdfController.document;
+  if (!document) {
+    NSLog(@"Document is nil.");
+    return;
+  }
+
+  // Rotate the first page 90 degrees clockwise
+  PSPDFDocumentEditor *editor = [[PSPDFDocumentEditor alloc] initWithDocument:document];
+  if (!editor) {
+    NSLog(@"Document editing not available.");
+    return;
+  }
+
+  [editor rotatePages:@[@(pageIndex)] rotation:90];
+
+  [editor saveWithCompletionBlock:^(PSPDFDocument *_Nullable document, NSError *_Nullable error) {
+    if (error) {
+      NSLog(@"Error while saving: %@", error);
+    } else {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        // Reload the document in the UI
+        [self.pdfController reloadData];
+      });
+    }
+  }];
+}
+
 - (BOOL)addAnnotation:(id)jsonAnnotation error:(NSError *_Nullable *)error {
   NSData *data;
   if ([jsonAnnotation isKindOfClass:NSString.class]) {

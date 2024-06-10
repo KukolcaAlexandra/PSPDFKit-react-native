@@ -332,6 +332,31 @@ class PSPDFKitView extends React.Component {
     }
   };
 
+  rotatePage = function (pageIndex) {
+    if (Platform.OS === 'android') {
+      let requestId = this._nextRequestId++;
+      let requestMap = this._requestMap;
+
+      // We create a promise here that will be resolved once onDataReturned is called.
+      let promise = new Promise(function (resolve, reject) {
+        requestMap[requestId] = { resolve: resolve, reject: reject };
+      });
+
+      UIManager.dispatchViewManagerCommand(
+          findNodeHandle(this.refs.pdfView),
+          this._getViewManagerConfig('RCTPSPDFKitView').Commands.rotatePage,
+          [requestId, pageIndex],
+      );
+
+      return promise;
+    } else if (Platform.OS === 'ios') {
+      return NativeModules.PSPDFKitViewManager.rotatePage(
+          pageIndex,
+          findNodeHandle(this.refs.pdfView),
+      );
+    }
+  };
+  
   /**
    * Removes an existing annotation from the current document.
    *
