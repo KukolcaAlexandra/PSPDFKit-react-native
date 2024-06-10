@@ -218,8 +218,13 @@ public class PSPDFKitModule extends ReactContextBaseJavaModule implements Applic
 
     @ReactMethod
     public void setLicenseKey(@Nullable String licenseKey, @Nullable Promise promise) {
-         try {
-            PSPDFKit.initialize(getCurrentActivity(), licenseKey, new ArrayList<>(), HYBRID_TECHNOLOGY);
+        if (licenseKey == null) {
+            promise.reject("INVALID_ARGUMENT", "License key is null");
+            return;
+        }
+
+        try {
+            PSPDFKit.initialize(getReactApplicationContext(), licenseKey, new ArrayList<>(), HYBRID_TECHNOLOGY);
             promise.resolve("Initialised PSPDFKit");
         } catch (InvalidPSPDFKitLicenseException e) {
             promise.reject(e);
@@ -230,8 +235,13 @@ public class PSPDFKitModule extends ReactContextBaseJavaModule implements Applic
     public void setLicenseKeys(@Nullable String androidLicenseKey, @Nullable String iOSLicenseKey, @Nullable Promise promise) {
         // Here, we ignore the `iOSLicenseKey` parameter and only care about `androidLicenseKey`.
         // `iOSLicenseKey` will be used to activate the license on iOS.
+        if (androidLicenseKey == null) {
+            promise.reject("INVALID_ARGUMENT", "Android license key is null");
+            return;
+        }
+
         try {
-            PSPDFKit.initialize(getCurrentActivity(), androidLicenseKey, new ArrayList<>(), HYBRID_TECHNOLOGY);
+            PSPDFKit.initialize(getReactApplicationContext(), androidLicenseKey, new ArrayList<>(), HYBRID_TECHNOLOGY);
             promise.resolve("Initialised PSPDFKit");
         } catch (InvalidPSPDFKitLicenseException e) {
             promise.reject(e);
