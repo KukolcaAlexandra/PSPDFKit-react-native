@@ -34,6 +34,19 @@ public class PdfViewStateChangedEvent extends Event<PdfViewStateChangedEvent> {
     private final boolean annotationEditingActive;
     private final boolean textSelectionActive;
     private final boolean formEditingActive;
+    private final String uuidString;
+    
+    public PdfViewStateChangedEvent(@IdRes int viewId, String uuidString) {
+        super(viewId);
+        this.documentIsLoaded = false;
+        this.currentPageIndex = -1;
+        this.pageCount = -1;
+        this.annotationCreationActive = false;
+        this.annotationEditingActive = false;
+        this.textSelectionActive = false;
+        this.formEditingActive = false;
+        this.uuidString = uuidString;
+    }
 
     public PdfViewStateChangedEvent(@IdRes int viewId) {
         super(viewId);
@@ -44,6 +57,7 @@ public class PdfViewStateChangedEvent extends Event<PdfViewStateChangedEvent> {
         this.annotationEditingActive = false;
         this.textSelectionActive = false;
         this.formEditingActive = false;
+        this.uuidString = "";
     }
 
     public PdfViewStateChangedEvent(@IdRes int viewID,
@@ -53,32 +67,34 @@ public class PdfViewStateChangedEvent extends Event<PdfViewStateChangedEvent> {
                                     boolean annotationEditingActive,
                                     boolean textSelectionActive,
                                     boolean formEditingActive) {
-        super(viewID);
-        this.documentIsLoaded = true;
-        this.currentPageIndex = currentPageIndex;
-        this.pageCount = pageCount;
-        this.annotationCreationActive = annotationCreationActive;
-        this.annotationEditingActive = annotationEditingActive;
-        this.textSelectionActive = textSelectionActive;
-        this.formEditingActive = formEditingActive;
-    }
+    super(viewID);
+    this.documentIsLoaded = true;
+    this.currentPageIndex = currentPageIndex;
+    this.pageCount = pageCount;
+    this.annotationCreationActive = annotationCreationActive;
+    this.annotationEditingActive = annotationEditingActive;
+    this.textSelectionActive = textSelectionActive;
+    this.formEditingActive = formEditingActive;
+    this.uuidString = "";
+  }
 
-    @Override
-    public String getEventName() {
-        return EVENT_NAME;
-    }
+  @Override
+  public String getEventName() {
+    return EVENT_NAME;
+  }
 
-    @Override
-    public void dispatch(RCTEventEmitter rctEventEmitter) {
-        WritableMap eventData = Arguments.createMap();
-        eventData.putBoolean("documentLoaded", documentIsLoaded);
-        eventData.putInt("currentPageIndex", currentPageIndex);
-        eventData.putInt("pageCount", pageCount);
-        eventData.putBoolean("annotationCreationActive", annotationCreationActive);
-        eventData.putInt("affectedPageIndex", currentPageIndex);
-        eventData.putBoolean("annotationEditingActive", annotationEditingActive);
-        eventData.putBoolean("textSelectionActive", textSelectionActive);
-        eventData.putBoolean("formEditingActive", formEditingActive);
-        rctEventEmitter.receiveEvent(getViewTag(), getEventName(), eventData);
-    }
+  @Override
+  public void dispatch(RCTEventEmitter rctEventEmitter) {
+    WritableMap eventData = Arguments.createMap();
+    eventData.putBoolean("documentLoaded", documentIsLoaded);
+    eventData.putInt("currentPageIndex", currentPageIndex);
+    eventData.putInt("pageCount", pageCount);
+    eventData.putBoolean("annotationCreationActive", annotationCreationActive);
+    eventData.putInt("affectedPageIndex", currentPageIndex);
+    eventData.putBoolean("annotationEditingActive", annotationEditingActive);
+    eventData.putBoolean("textSelectionActive", textSelectionActive);
+    eventData.putBoolean("formEditingActive", formEditingActive);
+    eventData.putString("downloadInitWithUUID", uuidString);
+    rctEventEmitter.receiveEvent(getViewTag(), getEventName(), eventData);
+  }
 }
