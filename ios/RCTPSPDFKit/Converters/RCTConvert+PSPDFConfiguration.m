@@ -299,11 +299,6 @@ RCT_MULTI_ENUM_CONVERTER(PSPDFSettingsOptions,
                          PSPDFSettingsOptionAll,
                          unsignedIntegerValue)
 
-RCT_ENUM_CONVERTER(PSPDFConfigurationSpreadFitting,
-                   (SpreadFittingMap),
-                   PSPDFConfigurationSpreadFittingAdaptive,
-                   unsignedIntegerValue)
-
 RCT_MULTI_ENUM_CONVERTER(PSPDFDocumentSharingFileFormatOptions,
                          (@{@"PDF" : @(PSPDFDocumentSharingFileFormatOptionPDF),
                             @"original": @(PSPDFDocumentSharingFileFormatOptionOriginal),
@@ -610,7 +605,6 @@ RCT_MULTI_ENUM_CONVERTER(PSPDFDocumentSharingPagesOptions,
   SET(pageMode, PSPDFPageMode)
   SET(firstPageAlwaysSingle, BOOL)
   SET(clipToPageBoundaries, BOOL)
-  SET(spreadFitting, PSPDFConfigurationSpreadFitting)
   SET(backgroundColor, UIColor)
   SET(renderAnimationEnabled, BOOL)
   SET(renderStatusViewPosition, PSPDFRenderStatusViewPosition)
