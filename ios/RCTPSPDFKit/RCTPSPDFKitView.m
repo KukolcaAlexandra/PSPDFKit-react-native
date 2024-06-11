@@ -244,6 +244,52 @@
   return @{@"annotations" : annotationsJSON};
 }
 
+- (void)beginDownload {
+    NSUUID *uuid = [NSUUID UUID];
+    NSString *uuidString = [uuid UUIDString];
+    self.onStateChanged(@{
+        @"downloadInitWithUUID" : uuidString
+    });
+}
+
+- (void)rotatePages {
+    NSError *error = nil;
+    NSUInteger pageCount = self.pdfController.document.pageCount;
+    NSUInteger totalPageCount = self.pdfController.document.pageCount;
+
+    PSPDFDocument *document = self.pdfController.document;
+    if (!document) {
+        NSLog(@"Document is nil.");
+        error = [NSError errorWithDomain:@"PSPDFKit"
+                                     code:101
+                                 userInfo:@{NSLocalizedDescriptionKey:@"No document"}];
+        return;
+    }
+
+    PSPDFDocumentEditor *editor = [[PSPDFDocumentEditor alloc] initWithDocument:document];
+    if (!editor) {
+        error = [NSError errorWithDomain:@"PSPDFKit"
+                                     code:102
+                                 userInfo:@{NSLocalizedDescriptionKey:@"Document editing not available."}];
+        NSLog(@"Document editing not available.");
+        return;
+    }
+
+    NSIndexSet *pageIndexSet = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, totalPageCount)];
+    [editor rotatePages:pageIndexSet rotation:90];
+
+    [editor saveWithCompletionBlock:^(PSPDFDocument *_Nullable document, NSError *_Nullable error) {
+        if (error) {
+            NSLog(@"Error while saving: %@", error);
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // Reload the document in the UI
+                [self.pdfController reloadData];
+            });
+        }
+    }];
+}
+
 - (BOOL)addAnnotation:(id)jsonAnnotation error:(NSError *_Nullable *)error {
   NSData *data;
   if ([jsonAnnotation isKindOfClass:NSString.class]) {
@@ -514,24 +560,19 @@
 
 // MARK: - Customize the Toolbar
 
-- (void)setLeftBarButtonItems:(nullable NSArray *)items forViewMode:(nullable NSString *) viewMode animated:(BOOL)animated {
+- (void)setLeftBarButtonItems:(nullable NSArray <NSString *> *)items forViewMode:(nullable NSString *) viewMode animated:(BOOL)animated {
   NSMutableArray *leftItems = [NSMutableArray array];
-  for (id item in items) {
-      if ([item isKindOfClass:[NSString class]]) {
-          UIBarButtonItem *barButtonItem = [RCTConvert uiBarButtonItemFrom:item forViewController:self.pdfController];
-          if (barButtonItem && ![self.pdfController.navigationItem.rightBarButtonItems containsObject:barButtonItem]) {
-            [leftItems addObject:barButtonItem];
-          }
-      } else if ([item isKindOfClass:[NSDictionary class]]) {
-          UIImage *image = [[UIImage imageNamed:[item objectForKey:@"image"]]
-                            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-          UIBarButtonItem *barButtonItem = [[UIBarButtonItem alloc] initWithImage:image style:UIBarButtonItemStylePlain target:self action:@selector(handleCustomBarButtonEvent:)];
-          [_sessionStorage addBarButtonItem:barButtonItem key:[item objectForKey:@"id"]];
-          if (barButtonItem && ![self.pdfController.navigationItem.rightBarButtonItems containsObject:barButtonItem]) {
-            [leftItems addObject:barButtonItem];
-          }
-      }
+  for (NSString *barButtonItemString in items) {
+    UIBarButtonItem *barButtonItem = [RCTConvert uiBarButtonItemFrom:barButtonItemString forViewController:self.pdfController];
+    if (barButtonItem && ![self.pdfController.navigationItem.rightBarButtonItems containsObject:barButtonItem]) {
+      [leftItems addObject:barButtonItem];
+    }
   }
+
+    UIImage *rotateImage = [UIImage imageNamed:@"download"];
+    UIBarButtonItem *downloadButtonItem = [[UIBarButtonItem alloc] initWithImage:rotateImage style:UIBarButtonItemStylePlain target:self action:@selector(downloadButtonTapped:)];
+
+    [leftItems addObject:downloadButtonItem];
   
   if (viewMode.length) {
     [self.pdfController.navigationItem setLeftBarButtonItems:[leftItems copy] forViewMode:[RCTConvert PSPDFViewMode:viewMode] animated:animated];
@@ -541,24 +582,20 @@
 }
 
 - (void)setRightBarButtonItems:(nullable NSArray <NSString *> *)items forViewMode:(nullable NSString *) viewMode animated:(BOOL)animated {
-    NSMutableArray *rightItems = [NSMutableArray array];
-    for (id item in items) {
-        if ([item isKindOfClass:[NSString class]]) {
-            UIBarButtonItem *barButtonItem = [RCTConvert uiBarButtonItemFrom:item forViewController:self.pdfController];
-            if (barButtonItem && ![self.pdfController.navigationItem.leftBarButtonItems containsObject:barButtonItem]) {
-              [rightItems addObject:barButtonItem];
-            }
-        } else if ([item isKindOfClass:[NSDictionary class]]) {
-            UIImage *image = [[UIImage imageNamed:[item objectForKey:@"image"]]
-                              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-            UIBarButtonItem *barButtonItem = [[UIBarButtonItem alloc] initWithImage:image style:UIBarButtonItemStylePlain target:self action:@selector(handleCustomBarButtonEvent:)];
-            [_sessionStorage addBarButtonItem:barButtonItem key:[item objectForKey:@"id"]];
-            if (barButtonItem && ![self.pdfController.navigationItem.leftBarButtonItems containsObject:barButtonItem]) {
-              [rightItems addObject:barButtonItem];
-            }
-        }
+  NSMutableArray *rightItems = [NSMutableArray array];
+
+    UIImage *rotateImage = [UIImage imageNamed:@"rotate"];
+    UIBarButtonItem *rotateButtonItem = [[UIBarButtonItem alloc] initWithImage:rotateImage style:UIBarButtonItemStylePlain target:self action:@selector(rotateButtonTapped:)];
+
+    [rightItems addObject:rotateButtonItem];
+
+    for (NSString *barButtonItemString in items) {
+      UIBarButtonItem *barButtonItem = [RCTConvert uiBarButtonItemFrom:barButtonItemString forViewController:self.pdfController];
+      if (barButtonItem && ![self.pdfController.navigationItem.leftBarButtonItems containsObject:barButtonItem]) {
+        [rightItems addObject:barButtonItem];
+      }
     }
-  
+
   if (viewMode.length) {
     [self.pdfController.navigationItem setRightBarButtonItems:[rightItems copy] forViewMode:[RCTConvert PSPDFViewMode:viewMode] animated:animated];
   } else {
@@ -662,6 +699,27 @@
     }
   }];
   return [barButtonItemsString copy];
+}
+
+// Action method for the rotate button
+- (void)rotateButtonTapped:(id)sender {
+    // Implement the action for the rotate button here
+    // Rotate the first page 90 degrees clockwise
+    PSPDFDocument *document = self.pdfController.document;
+    if (!document) {
+        NSLog(@"Document is nil.");
+        return;
+    }
+    [self rotatePages];
+}
+
+- (void)downloadButtonTapped:(id)sender {
+    PSPDFDocument *document = self.pdfController.document;
+    if (!document) {
+        NSLog(@"Document is nil.");
+        return;
+    }
+    [self beginDownload];
 }
 
 - (NSString *)findCustomButtonID:(UIBarButtonItem *)barButton {

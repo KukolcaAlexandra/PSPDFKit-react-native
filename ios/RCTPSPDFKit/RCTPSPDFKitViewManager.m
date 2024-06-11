@@ -94,6 +94,10 @@ RCT_CUSTOM_VIEW_PROPERTY(configuration, PSPDFConfiguration, RCTPSPDFKitView) {
             [builder overrideClass:PSPDFFontPickerViewController.class withClass:CustomFontPickerViewController.class];
             [builder setupFromJSON:json];
             _configuration = json;
+
+            if ([_configuration objectForKey:@"documentPassword"]) {
+								BOOL unlocked = [view.pdfController.document unlockWithPassword:[_configuration objectForKey:@"documentPassword"]];
+						}
         }];
 
         [self postProcessConfigurationOptionsWithJSON: json forPDFViewController: view.pdfController];

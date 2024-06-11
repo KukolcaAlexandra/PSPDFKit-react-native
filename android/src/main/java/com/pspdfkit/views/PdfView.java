@@ -112,6 +112,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -268,14 +269,22 @@ public class PdfView extends FrameLayout {
     }
 
     public void setConfiguration(PdfActivityConfiguration configuration) {
-        if (configuration != null && !configuration.equals(this.configuration)) {
-            // The configuration changed, recreate the fragment.
-            // We set the current page index so the fragment is created at this location.
-            this.pageIndex = fragment != null ? fragment.getPageIndex() : this.pageIndex;
-            removeFragment(false);
-        }
-        this.configuration = configuration;
-        setupFragment(false);
+      PdfActivityConfiguration themedConfiguration = configuration != null ?
+        new PdfActivityConfiguration.Builder(
+          configuration, R.style.Adnoc_Theme_Default, R.style.Adnoc_Theme_Dark
+        )
+          .hideDocumentTitleOverlay()
+          .build() : null;
+  
+  
+      if (themedConfiguration != null && !themedConfiguration.equals(this.configuration)) {
+        // The configuration changed, recreate the fragment.
+        // We set the current page index so the fragment is created at this location.
+        this.pageIndex = fragment != null ? fragment.getPageIndex() : this.pageIndex;
+        removeFragment(false);
+      }
+      this.configuration = themedConfiguration;
+      setupFragment();
     }
 
     public PdfActivityConfiguration getConfiguration() {
@@ -300,57 +309,40 @@ public class PdfView extends FrameLayout {
         this.documentPassword = documentPassword;
     }
 
+    private String docPath;
+
     public void setDocument(@Nullable String documentPath) {
-        if (documentPath == null) {
-            this.document = null;
-            removeFragment(false);
-            return;
+      if (documentPath == null) {
+        this.document = null;
+        removeFragment(false);
+        return;
+      }
+      docPath = documentPath;
+  
+      if (Uri.parse(documentPath).getScheme() == null) {
+        // If there is no scheme it might be a raw path.
+        try {
+          File file = new File(documentPath);
+          documentPath = Uri.fromFile(file).toString();
+        } catch (Exception e) {
+          documentPath = FILE_SCHEME + document;
         }
-
-        if (Uri.parse(documentPath).getScheme() == null) {
-            // If there is no scheme it might be a raw path.
-            try {
-                File file = new File(documentPath);
-                documentPath = Uri.fromFile(file).toString();
-            } catch (Exception e) {
-                documentPath = FILE_SCHEME + document;
-            }
-        }
-        if (documentOpeningDisposable != null) {
-            documentOpeningDisposable.dispose();
-        }
-        this.documentPath = documentPath;
-        updateState();
-
-        File documentFile = new File(documentPath);
-        if (PSPDFKitUtils.isValidImage(documentFile)) {
-            documentOpeningDisposable = ImageDocumentLoader.openDocumentAsync(getContext(), Uri.parse(documentPath))
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe(imageDocument -> {
-                        PdfView.this.document = imageDocument.getDocument();
-                        setupFragment(false);
-                    }, throwable -> {
-                        PdfView.this.document = null;
-                        setupFragment(false);
-                        eventDispatcher.dispatchEvent(new PdfViewDocumentLoadFailedEvent(getId(), throwable.getMessage()));
-                    });
-        } else {
-            documentOpeningDisposable = PdfDocumentLoader.openDocumentAsync(getContext(), Uri.parse(documentPath), documentPassword)
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe(pdfDocument -> {
-                        PdfView.this.document = pdfDocument;
-                        setupFragment(false);
-                    }, throwable -> {
-                        // The Android SDK will present password UI, do not emit an error.
-                        if (!(throwable instanceof InvalidPasswordException)) {
-                            PdfView.this.document = null;
-                            eventDispatcher.dispatchEvent(new PdfViewDocumentLoadFailedEvent(getId(), throwable.getMessage()));
-                        }
-                        setupFragment(true);
-                    });
-        }
+      }
+      if (documentOpeningDisposable != null) {
+        documentOpeningDisposable.dispose();
+      }
+      updateState();
+      documentOpeningDisposable = PdfDocumentLoader.openDocumentAsync(getContext(), Uri.parse(documentPath), documentPassword)
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(pdfDocument -> {
+          PdfView.this.document = pdfDocument;
+          setupFragment(true);
+        }, throwable -> {
+          PdfView.this.document = null;
+          setupFragment();
+          eventDispatcher.dispatchEvent(new PdfViewDocumentLoadFailedEvent(getId(), throwable.getMessage()));
+        });
     }
 
     public void setPageIndex(int pageIndex) {
@@ -469,136 +461,151 @@ public class PdfView extends FrameLayout {
             }));
     }
 
-    private void setupFragment(boolean recreate) {
-        if (fragmentTag != null && configuration != null && (document != null || recreate == true)) {
-            PdfUiFragment pdfFragment = (PdfUiFragment) fragmentManager.findFragmentByTag(fragmentTag);
-            if (pdfFragment != null &&
-                (pdfFragment.getArguments() == null ||
-                    pdfFragment.getArguments().getInt(ARG_ROOT_ID) != internalId)) {
-                // This is an orphaned fragment probably from a reload, get rid of it.
-                fragmentManager.beginTransaction()
-                    .remove(pdfFragment)
-                    .commitNow();
-                pdfFragment = null;
-            }
-
-            if (pdfFragment == null) {
-                if (recreate == true) {
-                    pdfFragment = PdfUiFragmentBuilder.fromUri(getContext(), Uri.parse(documentPath)).fragmentClass(ReactPdfUiFragment.class).build();
-                } else if (document != null) {
-                    pdfFragment = PdfUiFragmentBuilder.fromDocumentDescriptor(getContext(), DocumentDescriptor.fromDocument(document))
-                        .configuration(configuration)
-                        .fragmentClass(ReactPdfUiFragment.class)
-                        .build();
-                } else {
-                    return;
-                }
-                // We put our internal id so we can track if this fragment belongs to us, used to handle orphaned fragments after hot reloads.
-                pdfFragment.getArguments().putInt(ARG_ROOT_ID, internalId);
-                prepareFragment(pdfFragment, true);
-            } else {
-                View fragmentView = pdfFragment.getView();
-                if (pdfFragment.getDocument() != null && !pdfFragment.getDocument().getUid().equals(document.getUid())) {
-                    fragmentManager.beginTransaction()
-                        .remove(pdfFragment)
-                        .commitNow();
-                    // The document changed, create a new PdfFragment.
-                    pdfFragment = PdfUiFragmentBuilder.fromDocumentDescriptor(getContext(), DocumentDescriptor.fromDocument(document))
-                        .configuration(configuration)
-                        .fragmentClass(ReactPdfUiFragment.class)
-                        .build();
-                    prepareFragment(pdfFragment, true);
-                } else if (fragmentView != null && fragmentView.getParent() != this) {
-                    // We only need to detach the fragment if the parent view changed.
-                    fragmentManager.beginTransaction()
-                        .remove(pdfFragment)
-                        .commitNow();
-                    prepareFragment(pdfFragment, true);
-                }
-            }
-
-            if (pdfFragment.getDocument() != null) {
-                if (pageIndex <= document.getPageCount()-1) {
-                    pdfFragment.setPageIndex(pageIndex, true);
-                }
-            }
-
-            fragment = pdfFragment;
-            pdfUiFragmentGetter.onNext(Collections.singletonList(pdfFragment));
-        }
+    private void setupFragment() {
+      setupFragment(false);
     }
-
-    private void prepareFragment(final PdfUiFragment pdfUiFragment, final boolean attachFragment) {
-        if (attachFragment) {
-
-            getRootView().getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-                @Override
-                public void onGlobalLayout() {
-                    // Reattach the fragment if running on API >= 34, there is a compatibility issue with React Native StackScreen fragments.
-                    if (Build.VERSION.SDK_INT >= 34) {
-                        fragmentManager.beginTransaction()
-                                .detach(pdfUiFragment)
-                                .commitNow();
-
-                        fragmentManager.beginTransaction()
-                                .attach(pdfUiFragment)
-                                .commitNow();
-
-                        addView(pdfUiFragment.getView(), LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-                        attachPdfFragmentListeners(pdfUiFragment);
-                        updateAnnotationConfiguration();
-                    }
-                    getRootView().getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                }
-            });
-
+  
+    private void setupFragment(Boolean forceUpdate) {
+      if (fragmentTag != null && configuration != null && document != null) {
+        PdfUiFragment pdfFragment = (PdfUiFragment) fragmentManager.findFragmentByTag(fragmentTag);
+        if (pdfFragment != null &&
+          (pdfFragment.getArguments() == null ||
+            pdfFragment.getArguments().getInt(ARG_ROOT_ID) != internalId)) {
+          // This is an orphaned fragment probably from a reload, get rid of it.
+          fragmentManager.beginTransaction()
+            .remove(pdfFragment)
+            .commitNow();
+          pdfFragment = null;
+        }
+  
+        if (pdfFragment == null) {
+          pdfFragment = PdfUiFragmentBuilder.fromDocumentDescriptor(getContext(), DocumentDescriptor.fromDocument(document))
+            .configuration(configuration)
+            .fragmentClass(ReactPdfUiFragment.class)
+            .build();
+          // We put our internal id so we can track if this fragment belongs to us, used to handle orphaned fragments after hot reloads.
+          pdfFragment.getArguments().putInt(ARG_ROOT_ID, internalId);
+          prepareFragment(pdfFragment, true);
+        } else {
+          View fragmentView = pdfFragment.getView();
+          if (pdfFragment.getDocument() != null && !pdfFragment.getDocument().getUid().equals(document.getUid())) {
             fragmentManager.beginTransaction()
-                .add(pdfUiFragment, fragmentTag)
-                .commitNow();
-
-            View fragmentView = pdfUiFragment.getView();
-            addView(fragmentView, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+              .remove(pdfFragment)
+              .commitNow();
+            // The document changed create a new PdfFragment.
+            pdfFragment = PdfUiFragmentBuilder.fromDocumentDescriptor(getContext(), DocumentDescriptor.fromDocument(document))
+              .configuration(configuration)
+              .fragmentClass(ReactPdfUiFragment.class)
+              .build();
+            prepareFragment(pdfFragment, true);
+          } else if (forceUpdate || (fragmentView != null && fragmentView.getParent() != this)) {
+            // We only need to detach the fragment if the parent view changed.
+            fragmentManager.beginTransaction()
+              .remove(pdfFragment)
+              .commitNow();
+            prepareFragment(pdfFragment, true);
+          }
         }
-        attachPdfFragmentListeners(pdfUiFragment);
+  
+        if (pdfFragment.getDocument() != null) {
+          pdfFragment.setPageIndex(pageIndex, true);
+        }
+  
+        fragment = pdfFragment;
+        pdfUiFragmentGetter.onNext(Collections.singletonList(pdfFragment));
+      }
     }
 
-    private void attachPdfFragmentListeners(final PdfUiFragment pdfUiFragment) {
-        pdfUiFragment.setOnContextualToolbarLifecycleListener(pdfViewModeController);
-        pdfUiFragment.getPSPDFKitViews().getFormEditingBarView().addOnFormEditingBarLifecycleListener(pdfViewModeController);
-        ((ReactPdfUiFragment) pdfUiFragment).setReactPdfUiFragmentListener(new ReactPdfUiFragment.ReactPdfUiFragmentListener() {
+  private void prepareFragment(final PdfUiFragment pdfUiFragment, final boolean attachFragment) {
+    if (attachFragment) {
+      fragmentManager.beginTransaction()
+        .add(pdfUiFragment, fragmentTag)
+        .commitNow();
+      View fragmentView = pdfUiFragment.getView();
+      addView(fragmentView, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+    }
+  
+    pdfUiFragment.setOnContextualToolbarLifecycleListener(pdfViewModeController);
+    pdfUiFragment.getPSPDFKitViews().getFormEditingBarView().addOnFormEditingBarLifecycleListener(pdfViewModeController);
+    ReactPdfUiFragment reactPdfUiFragment = ((ReactPdfUiFragment) pdfUiFragment);
+    reactPdfUiFragment.setReactPdfUiFragmentListener(new ReactPdfUiFragment.ReactPdfUiFragmentListener() {
+      @Override
+      public void onConfigurationChanged(@NonNull PdfUiFragment pdfUiFragment) {
+        // If the configuration was changed from the UI a new fragment will be created, reattach our listeners.
+        prepareFragment(pdfUiFragment, false);
+        // Also notify other places that might want to reattach their listeners.
+        pdfUiFragmentGetter.onNext(Collections.singletonList(pdfUiFragment));
+      }
+
+      @Override
+      public void onStartDownload() {
+        eventDispatcher.dispatchEvent(new PdfViewStateChangedEvent(getId(), UUID.randomUUID().toString()));
+      }
+
+      @Override
+      public void reloadData() {
+        setDocument(docPath);
+      }
+    });
+    setShowNavigationButtonInToolbar(true);
+  
+    PdfSearchView searchView = pdfUiFragment.getPSPDFKitViews().getSearchView();
+    if (searchView instanceof PdfSearchViewInline) {
+      // The inline search view provides its own back button hide ours if it becomes visible.
+      searchView.addOnVisibilityChangedListener(new OnVisibilityChangedListener() {
+        @Override
+        public void onShow(@NonNull View view) {
+          ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(false);
+        }
+
+        @Override
+        public void onHide(@NonNull View view) {
+          ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(isNavigationButtonShown);
+        }
+      });
+    }
+  
+    // After attaching the PdfUiFragment we can access the PdfFragment.
+    preparePdfFragment(pdfUiFragment.getPdfFragment());
+  }
+
+  /*private void attachPdfFragmentListeners(final PdfUiFragment pdfUiFragment) {
+    pdfUiFragment.setOnContextualToolbarLifecycleListener(pdfViewModeController);
+    pdfUiFragment.getPSPDFKitViews().getFormEditingBarView().addOnFormEditingBarLifecycleListener(pdfViewModeController);
+    ((ReactPdfUiFragment) pdfUiFragment).setReactPdfUiFragmentListener(new ReactPdfUiFragment.ReactPdfUiFragmentListener() {
+        @Override
+        public void onConfigurationChanged(@NonNull PdfUiFragment pdfUiFragment) {
+            // If the configuration was changed from the UI a new fragment will be created, reattach our listeners.
+            prepareFragment(pdfUiFragment, false);
+            // Also notify other places that might want to reattach their listeners.
+            pdfUiFragmentGetter.onNext(Collections.singletonList(pdfUiFragment));
+        }
+
+        @Override
+        public void onNavigationButtonClicked(@NonNull PdfUiFragment pdfUiFragment) {
+            eventDispatcher.dispatchEvent(new PdfViewNavigationButtonClickedEvent(getId()));
+        }
+    });
+
+    PdfSearchView searchView = pdfUiFragment.getPSPDFKitViews().getSearchView();
+    if (searchView instanceof PdfSearchViewInline) {
+        // The inline search view provides its own back button hide ours if it becomes visible.
+        searchView.addOnVisibilityChangedListener(new OnVisibilityChangedListener() {
             @Override
-            public void onConfigurationChanged(@NonNull PdfUiFragment pdfUiFragment) {
-                // If the configuration was changed from the UI a new fragment will be created, reattach our listeners.
-                prepareFragment(pdfUiFragment, false);
-                // Also notify other places that might want to reattach their listeners.
-                pdfUiFragmentGetter.onNext(Collections.singletonList(pdfUiFragment));
+            public void onShow(@NonNull View view) {
+                ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(false);
             }
 
             @Override
-            public void onNavigationButtonClicked(@NonNull PdfUiFragment pdfUiFragment) {
-                eventDispatcher.dispatchEvent(new PdfViewNavigationButtonClickedEvent(getId()));
+            public void onHide(@NonNull View view) {
+                ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(isNavigationButtonShown);
             }
         });
-
-        PdfSearchView searchView = pdfUiFragment.getPSPDFKitViews().getSearchView();
-        if (searchView instanceof PdfSearchViewInline) {
-            // The inline search view provides its own back button hide ours if it becomes visible.
-            searchView.addOnVisibilityChangedListener(new OnVisibilityChangedListener() {
-                @Override
-                public void onShow(@NonNull View view) {
-                    ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(false);
-                }
-
-                @Override
-                public void onHide(@NonNull View view) {
-                    ((ReactPdfUiFragment) pdfUiFragment).setShowNavigationButtonInToolbar(isNavigationButtonShown);
-                }
-            });
-        }
-
-        // After attaching the PdfUiFragment we can access the PdfFragment.
-        preparePdfFragment(pdfUiFragment.getPdfFragment());
     }
+
+    // After attaching the PdfUiFragment we can access the PdfFragment.
+    preparePdfFragment(pdfUiFragment.getPdfFragment());
+  }*/
 
     private void preparePdfFragment(@NonNull PdfFragment pdfFragment) {
         pdfFragment.addDocumentListener(new SimpleDocumentListener() {
@@ -765,6 +772,50 @@ public class PdfView extends FrameLayout {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe((instantJson) -> eventDispatcher.dispatchEvent(new PdfViewDataReturnedEvent(getId(), requestId, true)),
                 (throwable) -> eventDispatcher.dispatchEvent(new PdfViewDataReturnedEvent(getId(), requestId, throwable)));
+    }
+
+    public void rotatePage(final int requestId, int pageIndex) {
+      if (fragment != null) {
+        // Ensure the document is loaded.
+        if (document == null) {
+          return;
+        }
+  
+        // Get the existing rotation offset of the current page.
+        int currentRotationOffset = document.getRotationOffset(pageIndex);
+  
+        // Add the desired rotation to the current offset.
+        int newRotation = currentRotationOffset + 90;
+  
+        // Make sure that the new rotation offset is in bounds.
+        if (newRotation < 0) {
+          newRotation += 360;
+        } else if (newRotation >= 360) {
+          newRotation -= 360;
+        }
+  
+        switch (newRotation) {
+          case 0:
+            newRotation = PdfDocument.NO_ROTATION;
+            break;
+          case 90:
+            newRotation = PdfDocument.ROTATION_90;
+            break;
+          case 180:
+            newRotation = PdfDocument.ROTATION_180;
+            break;
+          case 270:
+            newRotation = PdfDocument.ROTATION_270;
+            break;
+          default:
+            return;
+        }
+  
+        // Applies a temporary rotation to the specified page of the document.
+        // This will change the size reported by the document to match the new rotation.
+        // The document will not be modified by this call.
+        document.setRotationOffset(newRotation, pageIndex);
+      }
     }
 
     public Disposable removeAnnotation(final int requestId, ReadableMap annotation) {
